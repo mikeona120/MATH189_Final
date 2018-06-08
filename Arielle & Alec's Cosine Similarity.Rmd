@@ -1,0 +1,253 @@
+# Setup Environment
+### * Choose your favorite directory, say 'mydir'
+### * Download dataset https://www.kaggle.com/donorschoose/io/downloads/io.zip/8 and extract to 'mydir/io'
+
+Note for Alec: in the miniconda environment, using the install.packages() function screws up dependencies. (MASS and dplyr occasionally have dependency issues) Its better to just install packages with the conda command line, for example: **conda install -c r r-dplyr**
+
+Resources for Alec: https://conda.io/docs/commands/conda-install.html,
+https://conda.io/docs/commands/conda-remove.html,
+blog.rtwilson.com/conda-revisions-letting-you-rollback-to-a-previous-version-of-your-environment/
+conda install -c r r-essentials
+conda install -c r jupyter
+conda install -c r r-caret
+conda install -c r r-e1071
+conda install -c r r-rocr
+conda install -c r r-lubridate
+conda install -c r r-dplyr
+conda install -c r r-broom r-caret r-dbplyr r-dplyr r-essentials r-modelr r-recipes r-tidyr r-tidyverse
+conda install -f -c r r-mass
+
+```{r}
+sessionInfo() #Shows the currently loaded and attached packages
+library() #Shows the currently available packages, want all below to be available
+#install.packages("ggplot2")
+#install.packages("ROCR") *
+#install.packages("lubridate")
+#install.packages("caret")
+#install.packages("e1071") *
+#install.packages("dplyr")
+#install.packages("MASS")
+```
+
+```{r}
+library(ggplot2)
+library(ROCR)
+library(lubridate)
+require(caret)
+library(e1071)
+library(readr)
+library(dplyr)
+```
+
+# Prepare Data
+### * Clean and merge the data Arielle-style. Only needs to be done once.
+### * Then save the data for faster loading later.
+
+```{r}
+#Load in Projects and Schools files. Exclude a few columns.
+Projects <- read_csv("io/Projects.csv", col_types = cols(`Project Essay` = col_skip(), `Project Need Statement` = col_skip(), `Project Short Description` = col_skip(), `Project Subject Subcategory Tree` = col_skip(), `Project Title` = col_skip()))
+Schools <- read_csv("io/Schools.csv")
+```
+
+```{r}
+#Combine/merge School and Projects data
+data <- merge(Projects, Schools, by = "School ID")
+names(data) <- c("school.id", "project.id", "teacher.id", "teacher.proj.seq", "project.type", "project.subject", "project.grade", "project.resource", "project.cost", "project.start.date", "project.exp.date", "project.status", "project.funded.date", "school.name", "school.metro.type", "school.percent.lunch", "school.state", "school.zip", "school.city", "school.county", "school.district" )
+```
+
+```{r}
+#Clean the merged data
+projectdata <- filter(data, project.status != "Live")
+#createdatapartition() look it up
+
+projectdata <- dplyr::filter(data, project.status != "Live")
+#projectdata <- lapply(projectdata, gsub, pattern = "unknown", replacement = "uk", fixed = TRUE) #Alec added this
+projectdata <- dplyr::filter(projectdata, !is.na(project.status))
+projectdata <- dplyr::filter(projectdata, !is.na(project.subject))
+projectdata$project.status <- as.factor(projectdata$project.status)
+levels(projectdata$project.status)
+contrasts(projectdata$project.status)
+
+projectdata <- dplyr::filter(projectdata, !is.na(project.resource))
+projectdata <- dplyr::filter(projectdata, !is.na(school.metro.type))
+projectdata <- dplyr::filter(projectdata, !is.na(school.percent.lunch))
+projectdata <- dplyr::filter(projectdata, !is.na(school.state))
+
+#Rename Project Categories
+project_lkup <- c("Applied Learning" = "Applied Learning","Math & Science" = "Math & Science", "History & Civics" = "History & Civics", "Health & Sports" = "Health & Sports", "Special Needs" = "Special Needs", "Literacy & Language" = "Literacy & Language", "Warmth, Care & Hunger" = "Warmth, Care & Hunger", "Music & The Arts" = "Music & The Arts",  "Applied Learning, Literacy & Language" = "Applied Learning", "History & Civics, Math & Science" = "History & Civics", "Literacy & Language, Special Needs" = "Special Needs",
+                 "Applied Learning, Special Needs" = "Special Needs", "Health & Sports, Special Needs" = "Special Needs",
+                 "Math & Science, Literacy & Language" = "Math & Science", "Literacy & Language, Math & Science" = "Literacy & Language", "Literacy & Language, Music & The Arts" = "Music & The Arts", "Math & Science, Special Needs" = "Special Needs", "Math & Science, Applied Learning" = "Math & Science",
+                 "Literacy & Language, Applied Learning" = "Literacy & Language", "Applied Learning, Music & The Arts" = "Music & The Arts", "History & Civics, Literacy & Language" = "History & Civics", "Applied Learning, Math & Science" = "Applied Learning", "Health & Sports, Math & Science" = "Health & Sports", "Applied Learning, Health & Sports" = "Health & Sports", "History & Civics, Music & The Arts" = "History & Civics", "Math & Science, History & Civics" = "Math & Science", "Math & Science, Music & The Arts" = "Music & The Arts", "Special Needs, Music & The Arts" = "Special Needs", "History & Civics, Applied Learning" = "History & Civics", "History & Civics, Special Needs" = "Special Needs", "Music & The Arts, Special Needs" = "Special Needs", "Literacy & Language, Health & Sports" = "Literacy & Language", "Math & Science, Health & Sports" = "Math & Science", "Health & Sports, Literacy & Language" = "Health & Sports", "Applied Learning, History & Civics" = "Applied Learning", "Music & The Arts, History & Civics" = "Music & The Arts", "Health & Sports, Applied Learning" = "Health & Sports", "Music & The Arts, Applied Learning" = "Music & The Arts", "Health & Sports, Music & The Arts" = "Health & Sports", "Special Needs, Health & Sports" = "Special Needs", "History & Civics, Health & Sports" = "History & Civics", "Music & The Arts, Health & Sports" = "Music & The Arts", "Health & Sports, History & Civics" = "Health & Sports", "Health & Sports, Warmth, Care & Hunger" = "Warmth, Care & Hunger", "Special Needs, Warmth, Care & Hunger" = "Special Needs", "Math & Science, Warmth, Care & Hunger" = "Warmth, Care & Hunger", "Applied Learning, Warmth, Care & Hunger" = "Warmth, Care & Hunger",
+                 "Literacy & Language, Warmth, Care & Hunger" = "Warmth, Care & Hunger", "History & Civics, Warmth, Care & Hunger" = "Warmth, Care & Hunger",
+                 "Music & The Arts, Warmth, Care & Hunger" = "Music & The Arts", "Literacy & Language, History & Civics" = "Literacy & Language")
+projectdata$proj.type.clean <- as.character(project_lkup[projectdata$project.subject])
+```
+
+```{r}
+projectdata$proj.time.up <- projectdata$project.exp.date - projectdata$project.start.date
+projectdata <- dplyr::filter(projectdata, proj.time.up > 6)
+projectdata$week.start.date <- as.factor(week(projectdata$project.start.date))
+projectdata$year.start.date <- as.factor(year(projectdata$project.start.date))
+projectdata <- dplyr::filter(projectdata, school.metro.type != "unknown")
+
+projectdata$week.start.date <- as.factor(projectdata$week.start.date)
+projectdata$year.start.date <- as.factor(projectdata$year.start.date)
+projectdata$project.status <- make.names(projectdata$project.status)
+projectdata$project.status <- as.factor(projectdata$project.status)
+```
+
+```{r}
+#Check the morege, edits, and write outputs for easier loading later.
+head(projectdata)
+write_csv(projectdata,"io/ArielleMerge.csv")
+```
+
+# Perform Cosine Similarity using Arielle's Merged dataset 
+
+### Load data
+
+```{r}
+#Load the data
+data <- read_csv("io/ArielleMerge.csv")
+dim(data)
+length(unique(data$project.id))
+```
+
+### Vectorize and Numeric-ize the Categorical Features
+Some features are categories, some are integers. We want these features to be recoded to the "numeric" object type.
+
+Then later, we can choose which features to use for the cosines similarity.
+
+```{r}
+#Work with a new copy of our data for vectorized features
+datacode = data
+
+# First, store variables of interest in "factor" object classes (ultimately an integer)
+datacode$project.grade <- as.factor(datacode$project.grade)
+datacode$school.metro.type <- as.factor(datacode$school.metro.type)
+datacode$school.county <- as.factor(datacode$school.county)
+#https://stackoverflow.com/questions/9251326/convert-data-frame-column-format-from-character-to-factor
+
+# Second, observe each feature's categorical values so we know what we will encode
+# From last step, our data is of the 'factor' class, meaning categorical information is readily available as 'levels'
+#https://cran.r-project.org/doc/contrib/de_Jonge+van_der_Loo-Introduction_to_data_cleaning_with_R.pdf
+levels(datacode$project.grade)
+levels(datacode$school.metro.type)
+length(levels(datacode$school.county)) #> 1750 categories. Thats a lot of unique values, lets NOT encode or use it.
+#another option is to use unique()
+#unique(data[,"project.grade"])
+#https://www.quora.com/How-can-I-get-a-count-of-all-unique-values-in-a-Column-in-R-language
+
+# Third, recode our factors. --> FEATURE ENCODING IS SUBJECTIVE <--
+#https://dplyr.tidyverse.org/reference/recode.html
+lvlkey_g = list('Grades PreK-2' =-2, 'Grades 3-5'=-1, 'unknown'=0, 'Grades 6-8'=1, 'Grades 9-12'=2)
+lvlkey_m = list(rural =-2, town =-1, suburban =1, urban =2)
+datacode$project.grade = recode(datacode$project.grade, !!!lvlkey_g) #We could as.integer these to save space, but math will be done on them soon as 'numeric' doubles anyways
+datacode$school.metro.type = recode(datacode$school.metro.type, !!!lvlkey_m)
+#Model Matrix and a 1-hot encoding might also be what we want, but i'm having a hard time using it for desired output: http://appliedpredictivemodeling.com/blog/2013/10/23/the-basics-of-encoding-categorical-data-for-predictive-models
+#model.matrix(~ordered(levels(datacode$project.grade)))
+
+# Last, integer data only needs to be numeric-ized, not factorized.
+#datacode$project.id = as.numeric(datacode$project.id)
+datacode$project.cost = as.numeric(datacode$project.cost)
+datacode$school.percent.lunch = as.numeric(datacode$school.percent.lunch)
+
+#Check that your features of interest are all 'numeric' type
+sapply(datacode,class)
+```
+
+# Choose your features
+
+```{r}
+X = datacode[,c("project.id","project.grade",'project.cost',"school.metro.type","school.percent.lunch")]
+head(X)
+sapply(X,class)
+class(X)
+```
+
+# Compute Cosine Similarity for Select Rows
+
+```{r}
+### FUNCTIONS ###
+
+#Input: (data frame, row's index, comparison row's index)
+#Output: cosine similarity
+cosvec = function(X,i,j)
+    {
+    r1 = as.matrix(X[i,-1]) #Get ith row with all columns -column1
+    r2 = as.matrix(X[j,-1])
+    return ((r1%*%t(r2)) / (norm(r1, type="2") * norm(r2, type="2"))) #Compute the cosine similarity. t() is transpose. %*% is matrix cross product. norm(x, type = c("O", "I", "F", "M", "2"))
+    }
+
+
+#Input: (data frame, lowest row index, highest row index)
+#Output: 'cosine similarity matrix'. It is upper triangular. Containes cosine similarity between all row pairs in the low-high range.
+cosim = function(X,lo,hi)
+    {
+    out = matrix(NA,nrow=(hi-lo)+1,ncol=(hi-lo)+1)
+    for (i in lo:hi)
+        {
+        for (j in i:hi)
+            {
+            ix = i-lo + 1
+            jx = j-lo + 1
+            out[ix,jx] = cosvec(X,i,j)#Compare all vectors between lo,hi. Show this in a vector. Only upper triangluar is needed.
+            }
+        }
+    return (out)
+    }
+#For example, the first row second column out[1,2] shows how element 'lo' is similar to element 'lo+1'
+#The following data frame "A" has 4 rows and 4 features. We select to compare rows b->d with lo=b
+#cosim(A,2,4)
+#   f1 f2 f3 f4       b   c   d
+#   -----------      ----------
+# a| 2 -1  5  2    b| 1  .5   1
+# b| 2  3  2  1 -> c| na  1  .5
+# c| 1  1  1  1    d| na  na  1
+# d| 2  3  2  1
+
+
+### Scratch Work ###
+
+#Backup Cosine Similarity
+#r1 = as.matrix(X[50,-1]) #Get all columns -column1
+#r2 = as.matrix(X[40545,-1])
+#cosim = r1%*%t(r2) / (norm(r1, type="2") * norm(r2, type="2"))
+#cosim
+
+#Test Triangular Matrix Formula
+#a = matrix(c(1,1,1,1,1,1),6,6)
+#a
+#out = matrix(NA,nrow=(5-2)+1,ncol=(5-2)+1)
+#out
+#for (i in 2:5)
+#    {
+#    for (j in i:5)
+#        {
+#        ix = i-2 + 1
+#        jx = j-2 + 1
+#        out[ix,jx] = a[i,j]*(i+j)
+#        }
+#    }
+#out
+
+#Code from stack exchange. I couldn't get it to agree with expand.grid
+#https://stats.stackexchange.com/questions/31565/is-there-an-r-function-that-will-compute-the-cosine-dissimilarity-matrix
+#cos.sim <- function(ix) 
+#{
+#    A = X[ix[1],]
+#    B = X[ix[2],]
+#    return( sum(A*B)/sqrt(sum(A^2)*sum(B^2)) )
+#}
+#n <- nrow(X)/(10^3)
+#n
+#cmb <- expand.grid(i=1:n, j=1:n) 
+#C <- matrix(apply(cmb,1,cos.sim),n,n)
+```
+
+```{r}
+cosim(X,1,5)
+```
+
+```{r}
+```
